@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string.h>
 #include "stopwatch.h"
-#include "common/EventTimer.h"
+#include "Common/EventTimer.h"
 //#include "encoder.h"
 #define WIN_SIZE 16  //window length
 #define PRIME 3   //
