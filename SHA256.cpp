@@ -24,6 +24,10 @@ using Hash = std::unique_ptr<uint8_t[]>;
  * - `len`, the length of the buffer.
  * Adapted from https://qvault.io/cryptography/how-sha-2-works-step-by-step-sha-256/
  */
+uint32_t rotr(uint32_t value, unsigned int shift) {
+    return (value >> shift) | (value << (32 - shift));
+}
+
 Hash sha_256(char* bytes, uint64_t len) {
     size_t content_len = len + 1 + 8;
     size_t buffer_len = 64 * ((content_len / 64) + 1);
@@ -54,8 +58,8 @@ Hash sha_256(char* bytes, uint64_t len) {
 	for (int i = 0; i < 16; i++) w[i] = __builtin_bswap32(w[i]);
 
 	for (int i = 16; i < 64; i++) {
-	    uint32_t s0 = (std::rotr(w[i-15], 7) ^ std::rotr(w[i-15], 18) ^ (w[i-15] >> 3));
-	    uint32_t s1 = (std::rotr(w[i-2], 17) ^ std::rotr(w[i-2], 19)  ^ (w[i-2] >> 10));
+	    uint32_t s0 = (rotr(w[i-15], 7) ^ rotr(w[i-15], 18) ^ (w[i-15] >> 3));
+	    uint32_t s1 = (rotr(w[i-2], 17) ^ rotr(w[i-2], 19)  ^ (w[i-2] >> 10));
 	    w[i] = w[i-16] + s0 + w[i-7] + s1;
 	}
 
@@ -63,10 +67,10 @@ Hash sha_256(char* bytes, uint64_t len) {
 	memcpy(a, h, sizeof(uint32_t)*8);
 
 	for (int i = 0; i < 64; i++) {
-	    uint32_t s1 = (std::rotr(a[4], 6) ^ std::rotr(a[4], 11) ^ std::rotr(a[4], 25));
+	    uint32_t s1 = (rotr(a[4], 6) ^ rotr(a[4], 11) ^ rotr(a[4], 25));
 	    uint32_t ch = (a[4] & a[5]) ^ ((~a[4]) & a[6]);
 	    uint32_t temp1 = a[7] + s1 + ch + k[i] + w[i];
-	    uint32_t s0 = (std::rotr(a[0], 2) ^ std::rotr(a[0], 13) ^ std::rotr(a[0], 22));
+	    uint32_t s0 = (rotr(a[0], 2) ^ rotr(a[0], 13) ^ rotr(a[0], 22));
 	    uint32_t maj = (a[0] & a[1]) ^ (a[0] & a[2]) ^ (a[1] & a[2]);
 	    uint32_t temp2 = s0 + maj;
 	    for (int i = 7; i > 0; i--) a[i] = a[i-1];

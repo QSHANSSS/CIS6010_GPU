@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++20 -O3
+CXXFLAGS = -std=c++17 -O3
 TARGET = cpu
 SRC = SHA256.cpp
 
