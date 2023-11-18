@@ -11,8 +11,8 @@
 #include <ios>
 #include <string>
 #include <vector>
-#include "Common/EventTimer.h"
 #include "stopwatch.h"
+//#include "SHA256.h"
 //#include <fmt/format.h>
 
 using Hash = std::unique_ptr<uint8_t[]>;
@@ -90,7 +90,7 @@ Hash sha_256(char* bytes, uint64_t len) {
 
     return out;
 }
-
+/*
 int main(int argc, char** argv) {
     if (argc != 2) {
 	std::cout << "usage: ./sha <path>" << "\n";
@@ -104,6 +104,12 @@ int main(int argc, char** argv) {
     file.seekg(0, std::ios::beg);
     char* buf = (char*)malloc(size);
     file.read(buf, size);
+	
+	int *boundary=(int *)malloc(sizeof(int)*(size));
+	uint8_t chunk_num;
+	unsigned char  *chunk=(unsigned char *)malloc(sizeof(unsigned char)*MAX_CHUNK_SIZE);
+
+	chunk_num=cdc_new(buf,size,boundary);
 
     cpu_sha_timer.start();
     auto hash = sha_256(buf, size);
@@ -119,4 +125,4 @@ int main(int argc, char** argv) {
 	float output_throughput_cpu = (256 / 1000000.0) / output_latency_cpu; // Mb/s
 	std::cout << "Output Throughput of cdc: " << output_throughput_cpu << " Mb/s."
 			<< " (Latency: " << output_latency_cpu << "s)." << std::endl;
-}
+} */

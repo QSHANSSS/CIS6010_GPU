@@ -1,10 +1,14 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -O3
 TARGET = cpu
-SRC = SHA256.cpp
+LDFLAGS = -lpthread -pthread
+SRCS = $(wildcard ./*.cpp module/*.cpp)#SHA256.cpp ./module/cdc.cpp
+OBJS = $(SRCS:.cpp=.o)
 
-$(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) -o $@ $<
+#%.o: %.cpp
+#	$(CXX) $(CXXFLAGS) -c $< -o $@ 
+$(TARGET): $(SRCS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(OBJS)
