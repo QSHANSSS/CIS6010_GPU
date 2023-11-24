@@ -9,6 +9,7 @@ int main(int argc, char** argv) {
 
     stopwatch cpu_sha_timer;
     stopwatch cpu_cdc_timer;
+	stopwatch cpu_dedup_timer;
     std::ifstream file(argv[1], std::ios::binary | std::ios::ate);
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
@@ -37,7 +38,10 @@ int main(int argc, char** argv) {
    	//char* HashArray = reinterpret_cast<char*>(hash.get());
    	unsigned char* hashPtr = (unsigned char *)malloc(sizeof(unsigned char)*32);
    	hashPtr=reinterpret_cast<unsigned char*>(hash.get());
+
+	cpu_dedup_timer.start();
 	int dedup_result=match_map(hashPtr);
+	cpu_dedup_timer.stop();
 	//for (int i = 0; i < 32; ++i) {
         //	printf("%c",hashPtr[i]);
     	//}
@@ -63,4 +67,10 @@ int main(int argc, char** argv) {
 	float output_throughput_cpu = (256 / 1000000.0) / output_latency_cpu; // Mb/s
 	std::cout << "Output Throughput of CPU_SHA256: " << output_throughput_cpu << " Mb/s."
 			<< " (Latency: " << output_latency_cpu << "s)." << std::endl;
+
+	std::cout << "--------------- deduplication_cpu Throughputs ---------------" << std::endl;
+	float output_latency_dedup_cpu = cpu_dedup_timer.latency() / 1000.0;
+	float output_throughput_dedup_cpu = (size / 1000000.0) / output_latency_dedup_cpu; // Mb/s
+	std::cout << "Output Throughput of CPU_Deduplication: " << output_throughput_dedup_cpu << " Mb/s."
+			<< " (Latency: " << output_latency_dedup_cpu << "s)." << std::endl;
 }
