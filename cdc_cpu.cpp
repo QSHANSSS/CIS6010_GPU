@@ -78,7 +78,7 @@ int cdc_base(char *buff, unsigned int buff_size,int *chunk_bound)
 	// put your cdc implementation here
     uint8_t chunk=0;
 	static int total_size;
-	int last_boundary;
+	int last_boundary=0;
     uint64_t a=hash_func2(buff,WIN_SIZE);
    for(int i=WIN_SIZE;i<buff_size-WIN_SIZE;i++)
    {

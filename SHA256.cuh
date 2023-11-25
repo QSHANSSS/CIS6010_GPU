@@ -5,21 +5,23 @@
 #include <cuda.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <cuda_runtime.h>
+#include <cuda_fp16.h>
 
 #define rotr(a,b) (((a) >> (b)) | ((a) << (32-(b))))
 
-typedef struct JOB {
+typedef struct CHUNK_Message {
 	unsigned char * data;
 	unsigned long long size;
 	unsigned char digest[64];
-	char fname[128];
-}JOB;
+	//char fname[128];
+}CHUNK;
 
 typedef struct {
 	unsigned char data[64];
-    uint32_t state[8];
 	uint32_t data_len;
 	unsigned long long bitlen;
+	uint32_t state[8];
 } SHA256_CTX;
 
 __constant__ uint32_t dev_k[64];
@@ -55,7 +57,7 @@ __device__ void sha256_message_schedule(SHA256_CTX *ctx, const unsigned char dat
 
 __device__ void sha256_compress(SHA256_CTX *ctx, uint32_t m[])
 {
-    uint32_t a, b, c, d, e, f, g, h, i, j, temp1, temp2, ch, s1, s0, maj;
+    uint32_t a, b, c, d, e, f, g, h, i, temp1, temp2, ch, s1, s0, maj;
 	a = ctx->state[0];
 	b = ctx->state[1];
 	c = ctx->state[2];
@@ -176,14 +178,3 @@ __device__ void sha256_update(SHA256_CTX *ctx, const unsigned char data[], size_
 	}
 }
 
-__global__ void sha256_gpu(JOB ** jobs, int n) {
-	int i = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t message[64];
-	
-	if (i < n){
-		SHA256_CTX ctx;
-		sha256_init(&ctx);
-		sha256_update(&ctx, jobs[i]->data, jobs[i]->size,message);
-		sha256_padding(&ctx, jobs[i]->digest,message);
-	}
-}

@@ -4,7 +4,7 @@ TARGET = cpu
 LDFLAGS = -lpthread -pthread
 SRCS = $(wildcard ./*.cpp module/*.cpp)#SHA256.cpp ./module/cdc.cpp
 OBJS = $(SRCS:.cpp=.o)
-GPU_SOURCE_FILE=SHA256.cu
+GPU_SOURCE_FILE=App.cu cdc_cpu.cpp deduplication.cpp SHA256.cpp
 
 #%.o: %.cpp
 #	$(CXX) $(CXXFLAGS) -c $< -o $@ 
