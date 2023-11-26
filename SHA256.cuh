@@ -10,10 +10,12 @@
 
 #define rotr(a,b) (((a) >> (b)) | ((a) << (32-(b))))
 
+
 typedef struct CHUNK_Message {
 	unsigned char * data;
 	unsigned long long size;
 	unsigned char digest[64];
+	uint32_t start;
 	//char fname[128];
 }CHUNK;
 
@@ -22,6 +24,7 @@ typedef struct {
 	uint32_t data_len;
 	unsigned long long bitlen;
 	uint32_t state[8];
+	//uint32_t start;
 } SHA256_CTX;
 
 __constant__ uint32_t dev_k[64];
@@ -36,6 +39,7 @@ static const uint32_t host_k[64] = {
 	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
 	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
 };
+
 
 __device__ void sha256_message_schedule(SHA256_CTX *ctx, const unsigned char data[],uint32_t m[])
 {
@@ -70,8 +74,8 @@ __device__ void sha256_compress(SHA256_CTX *ctx, uint32_t m[])
     #pragma unroll 64
 	for (i = 0; i < 64; ++i) {
 		s1 = h + rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
-        ch = (e & f) ^ (e & ~g);
-        temp1 = s1 + ch + + dev_k[i] + m[i];
+        ch = (e & f) ^ (~e & g);
+        temp1 = h + s1 + ch + + dev_k[i] + m[i];
 
         s0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
         maj= (((a) & (b)) ^ ((a) & (c)) ^ ((b) & (c)));
@@ -99,6 +103,8 @@ __device__ void sha256_compress(SHA256_CTX *ctx, uint32_t m[])
 
 __device__ void sha256_init(SHA256_CTX *ctx)
 {
+	ctx->data_len = 0;
+	ctx->bitlen = 0;
 	ctx->state[0] = 0x6a09e667;
 	ctx->state[1] = 0xbb67ae85;
 	ctx->state[2] = 0x3c6ef372;
@@ -107,8 +113,6 @@ __device__ void sha256_init(SHA256_CTX *ctx)
 	ctx->state[5] = 0x9b05688c;
 	ctx->state[6] = 0x1f83d9ab;
 	ctx->state[7] = 0x5be0cd19;
-    ctx->data_len = 0;
-	ctx->bitlen = 0;
 }
 
 __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m[])
@@ -143,7 +147,6 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m
 	ctx->data[58] = ctx->bitlen >> 40;
 	ctx->data[57] = ctx->bitlen >> 48;
 	ctx->data[56] = ctx->bitlen >> 56;
-	//sha256_transform(ctx, ctx->data);
     sha256_message_schedule(ctx, ctx->data,m);
 	sha256_compress(ctx,m);
 
@@ -160,14 +163,15 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m
 		hash[i + 28] = (ctx->state[7] >> (24 - i * 8)) & 0x000000ff;
 	}
 }
-
-__device__ void sha256_update(SHA256_CTX *ctx, const unsigned char data[], size_t len, uint32_t message[])
+//__constant__ char file_data[20000];
+__device__ void sha256_update(SHA256_CTX *ctx, uint32_t len, uint32_t message[],uint32_t start,unsigned char file_data[])
 {
 	uint32_t i;
-    
+    //ctx->data_len = 0;
 	// for each byte in message
 	for (i = 0; i < len; ++i) {
-		ctx->data[ctx->data_len] = data[i];
+		ctx->data[ctx->data_len] = file_data[start+i];
+		//printf("%c", file_data[start+i]);
 		ctx->data_len++;
 		if (ctx->data_len == 64) {
             sha256_message_schedule(ctx, ctx->data,message);
@@ -176,5 +180,6 @@ __device__ void sha256_update(SHA256_CTX *ctx, const unsigned char data[], size_
 			ctx->data_len = 0;
 		}
 	}
+	printf("\n");
 }
 

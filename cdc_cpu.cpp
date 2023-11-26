@@ -80,6 +80,7 @@ int cdc_base(char *buff, unsigned int buff_size,int *chunk_bound)
 	static int total_size;
 	int last_boundary=0;
     uint64_t a=hash_func2(buff,WIN_SIZE);
+	chunk_bound[chunk]=0;
    for(int i=WIN_SIZE;i<buff_size-WIN_SIZE;i++)
    {
 	    //printf("%c",buff[i]);
@@ -87,8 +88,8 @@ int cdc_base(char *buff, unsigned int buff_size,int *chunk_bound)
             a=a*PRIME-int(buff[i-1])*129140163+int(buff[i-1+WIN_SIZE])*PRIME;
         if((a%MODULUS)==TARGET) {  //choose MODULUS and TARGET
 	        total_size+=i-last_boundary;
-	        printf("\n************chunk%d: size=%d***********\n",chunk++,i-last_boundary);
-	        chunk_bound[chunk]=i;
+	        printf("\n************chunk%d: size=%d***********\n",chunk,i-last_boundary);
+	        chunk_bound[++chunk]=i;
 	        last_boundary=i;
         }   
    }

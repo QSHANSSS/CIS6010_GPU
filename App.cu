@@ -1,7 +1,16 @@
 #include "App.h"
 #include "SHA256.cuh"
+#include <cublas_v2.h>
+#include <cstdio>
+#include <cassert>
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <random>
 #define MAX_CHUNK_SIZE 256
 #define cudaCheck(err) (cudaErrorCheck(err, __FILE__, __LINE__))
+//extern "C" inline cudaError_t cudaMalloc(void **p, size_t s);
 
 char * hash_transform(unsigned char * buff) {
 	char * string = (char *)malloc(70);
@@ -25,11 +34,11 @@ void cudaErrorCheck(cudaError_t error, const char *file, int line)
     }
 }
 
-CHUNK * GPU_Chunk_Init(/*CHUNK * chunk,*/uint64_t size, unsigned char * data ){
+CHUNK * GPU_Chunk_Init(/*CHUNK * chunk,*/uint64_t size,  char * data ){
 	CHUNK *chunk;
     cudaCheck(cudaMallocManaged(&chunk, sizeof(CHUNK)));	//j = (JOB *)malloc(sizeof(JOB));
-	cudaCheck(cudaMallocManaged(&(chunk->data), 10000));
-	chunk->data = data;
+	cudaCheck(cudaMallocManaged(&(chunk->data), size*sizeof(chunk->data)));
+	chunk->data = (unsigned char*)data;
 	chunk->size = size;
     for (int i = 0; i < 64; i++)
 	{
@@ -38,29 +47,25 @@ CHUNK * GPU_Chunk_Init(/*CHUNK * chunk,*/uint64_t size, unsigned char * data ){
 	return chunk;
 }
 
-__global__ void sha256_gpu(CHUNK ** chunk, int n) {
+__global__ void sha256_gpu(CHUNK ** chunk, int n, unsigned char * file_data) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t message[64];
 	
 	if (i < n){
+		uint32_t message[64];
 		SHA256_CTX ctx;
 		sha256_init(&ctx);
-		sha256_update(&ctx, chunk[i]->data, chunk[i]->size,message);
+		sha256_update(&ctx, chunk[i]->size,message,chunk[i]->start,file_data);
 		sha256_padding(&ctx, chunk[i]->digest,message);
 	}
 }
 
-void RUN_SHA256_GPU(CHUNK ** chunk, int chunk_num){
+void RUN_SHA256_GPU(CHUNK ** chunk, int chunk_num, unsigned char * file_data){
 
-    cudaCheck(cudaMemcpyToSymbol(dev_k, host_k, sizeof(host_k), 0, cudaMemcpyHostToDevice));
     int BlockSize = 4;
 	int numBlocks = (chunk_num + BlockSize - 1) / BlockSize;
-	sha256_gpu <<< numBlocks, BlockSize >>> (chunk, chunk_num);
+	sha256_gpu <<< numBlocks, BlockSize >>> (chunk, chunk_num,file_data);
     cudaCheck(cudaDeviceSynchronize()); // wait for kernel to finish
-    cudaCheck(cudaGetLastError());      // check for errors from kernel run
 }
-
-
 
 int main(int argc, char** argv) {
     if (argc != 2) {
@@ -96,14 +101,15 @@ int main(int argc, char** argv) {
         cpu_sha_timer.start();
         auto hash = sha_256(chunk, boundary[i+1]-boundary[i]);
         cpu_sha_timer.stop();
-
-        //CHUNK * GPU_Chunk;
-
+		// printf("%d\t",boundary[i]);
+		// if(i==chunk_num-1)
+		// 	printf("%d\t",boundary[i+1]);
         for (int j = 0; j < 32; j++) 
             printf("%02x", static_cast<uint8_t>(hash[j]));
         std::cout<<"\n";
 
-        GPU_Chunk[i]=GPU_Chunk_Init(/*GPU_Chunk[i],*/boundary[i+1]-boundary[i],(unsigned char *)chunk);
+        GPU_Chunk[i]=GPU_Chunk_Init(/*GPU_Chunk[i],*/boundary[i+1]-boundary[i],chunk);
+		GPU_Chunk[i]->start=boundary[i];
 
    	    //char* HashArray = reinterpret_cast<char*>(hash.get());
    	    unsigned char* hashPtr = (unsigned char *)malloc(sizeof(unsigned char)*32);
@@ -112,23 +118,33 @@ int main(int argc, char** argv) {
 	    cpu_dedup_timer.start();
 	    int dedup_result=match_map(hashPtr);
 	    cpu_dedup_timer.stop();
-	    //for (int i = 0; i < 32; ++i) {
-        //	printf("%c",hashPtr[i]);
-    	//}
-    	//std::cout<<"\n";
+
 	    if(dedup_result==-1)
 		    std::cout<< "chunk"<<i<<" "<<"is distinct!"<<std::endl;
 	    else
 		    std::cout<< "chunk"<<i<<" "<<"is deduplicated with chunk"<<dedup_result<<std::endl;
     	std::cout<<"\n";
     }
-    gpu_sha_timer.start();
-    RUN_SHA256_GPU(GPU_Chunk,chunk_num);
-    gpu_sha_timer.stop();
+	//GPU SHA256
+	cudaCheck(cudaMemcpyToSymbol(dev_k, host_k, sizeof(host_k), 0, cudaMemcpyHostToDevice));
+	unsigned char * dev_buf=nullptr; char * host_buf=nullptr;
+	cudaCheck(cudaMalloc((void**)&dev_buf, size));
+	cudaCheck(cudaMemcpy(dev_buf, (unsigned char*)buf, size, cudaMemcpyHostToDevice));
+	//cudaCheck(cudaMemcpyToSymbol(file_data, buf, sizeof(buf)*size, 0, cudaMemcpyHostToDevice));
 
-	// for	(int m = 0; m < chunk_num; m++)
-	// 	for (int n = 0; n < 32; n++)
-	// 		printf("%02x", GPU_Chunk[m]->digest[n]);
+    gpu_sha_timer.start();
+    RUN_SHA256_GPU(GPU_Chunk,chunk_num,dev_buf);
+    gpu_sha_timer.stop();
+	cudaCheck(cudaGetLastError());      // check for errors from kernel run
+	cudaCheck(cudaMemcpy(buf, dev_buf, size, cudaMemcpyDeviceToHost));
+	//printf("%s", buf);
+
+	for	(int m = 0; m < chunk_num; m++){
+	 	for (int n = 0; n < 32; n++){
+	 		printf("%02x", GPU_Chunk[m]->digest[n]);
+		}
+		std::cout<<"\n";
+	}
 
 
     std::cout << "  " << argv[1] << "\n";
@@ -141,13 +157,13 @@ int main(int argc, char** argv) {
 
     std::cout << "--------------- sha256_cpu Throughputs ---------------" << std::endl;
 	float output_latency_cpu = cpu_sha_timer.latency() / 1000.0;
-	float output_throughput_cpu = (256 / 1000000.0) / output_latency_cpu; // Mb/s
+	float output_throughput_cpu = (256*chunk_num / 1000000.0) / output_latency_cpu; // Mb/s
 	std::cout << "Output Throughput of CPU_SHA256: " << output_throughput_cpu << " Mb/s."
 			<< " (Latency: " << output_latency_cpu << "s)." << std::endl;
 	
 	std::cout << "--------------- sha256_gpu Throughputs ---------------" << std::endl;
 	float output_latency_gpu = gpu_sha_timer.latency() / 1000.0;
-	float output_throughput_gpu = (256 / 1000000.0) / output_latency_gpu; // Mb/s
+	float output_throughput_gpu = (256*chunk_num / 1000000.0) / output_latency_gpu; // Mb/s
 	std::cout << "Output Throughput of GPU_SHA256: " << output_throughput_gpu << " Mb/s."
 			<< " (Latency: " << output_latency_gpu << "s)." << std::endl;
 

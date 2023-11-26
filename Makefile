@@ -15,4 +15,4 @@ gpu: $(GPU_SOURCE_FILE)
 	nvcc -std=c++17 --generate-code=arch=compute_75,code=[compute_75,sm_75] $^ -lcublas -o $@
 
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(TARGET) $(OBJS) gpu
