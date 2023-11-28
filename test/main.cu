@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
 		while (read != -1) {
 			//printf("%s\n", line);
 			read = getline(&line, &len, f);
-			line = trim(line);
+			//line = trim(line);
 			buff = get_file_data(line, &temp);
 			jobs[n++] = JOB_init(buff, temp, line);
 		}

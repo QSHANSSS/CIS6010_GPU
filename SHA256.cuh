@@ -8,14 +8,14 @@
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 
-#define rotr(a,b) (((a) >> (b)) | ((a) << (32-(b))))
+#define rotr(a,b) (((a) >> (b)) | ((a) << (32-b)))
 
 
 typedef struct CHUNK_Message {
 	unsigned char * data;
 	unsigned long long size;
 	unsigned char digest[64];
-	uint32_t start;
+	int start;
 	//char fname[128];
 }CHUNK;
 
@@ -41,7 +41,7 @@ static const uint32_t host_k[64] = {
 };
 
 
-__device__ void sha256_message_schedule(SHA256_CTX *ctx, const unsigned char data[],uint32_t m[])
+__device__ void sha256_message_schedule(const unsigned char data[],uint32_t m[])
 {
     uint32_t s0,s1,i,j;
 
@@ -115,7 +115,7 @@ __device__ void sha256_init(SHA256_CTX *ctx)
 	ctx->state[7] = 0x5be0cd19;
 }
 
-__device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m[])
+__device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[]/*, uint32_t m[]*/)
 {
 	uint32_t i;
 
@@ -131,8 +131,8 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m
 		ctx->data[i++] = 0x80;
 		while (i < 64)
 			ctx->data[i++] = 0x00;
-		//sha256_transform(ctx, ctx->data);
-        sha256_message_schedule(ctx, ctx->data,m);
+		uint32_t m[64];
+        sha256_message_schedule(ctx->data,m);
 	    sha256_compress(ctx,m);
 		memset(ctx->data, 0, 56);
 	}
@@ -147,7 +147,8 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m
 	ctx->data[58] = ctx->bitlen >> 40;
 	ctx->data[57] = ctx->bitlen >> 48;
 	ctx->data[56] = ctx->bitlen >> 56;
-    sha256_message_schedule(ctx, ctx->data,m);
+	uint32_t m[64];
+    sha256_message_schedule(ctx->data,m);
 	sha256_compress(ctx,m);
 
 	// Since this implementation uses little endian byte ordering and SHA uses big endian,
@@ -164,22 +165,21 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[], uint32_t m
 	}
 }
 //__constant__ char file_data[20000];
-__device__ void sha256_update(SHA256_CTX *ctx, uint32_t len, uint32_t message[],uint32_t start,unsigned char file_data[])
+__device__ void sha256_update(SHA256_CTX *ctx, uint32_t len,uint32_t start,unsigned char file_data[])
 {
 	uint32_t i;
     //ctx->data_len = 0;
 	// for each byte in message
 	for (i = 0; i < len; ++i) {
 		ctx->data[ctx->data_len] = file_data[start+i];
-		//printf("%c", file_data[start+i]);
 		ctx->data_len++;
 		if (ctx->data_len == 64) {
-            sha256_message_schedule(ctx, ctx->data,message);
+			uint32_t message[64];
+            sha256_message_schedule(ctx->data,message);
 			sha256_compress(ctx,message);
 			ctx->bitlen += 512;
 			ctx->data_len = 0;
 		}
 	}
-	printf("\n");
 }
 

@@ -22,3 +22,4 @@ uint8_t cdc(const char *buff,int buff_size,int *chunk_bound);
 int cdc_base(char *buff, unsigned int buff_size,int *chunk_bound);
 Hash sha_256(char* bytes, uint64_t len);
 int match_map(/*unordered_map<string,int> table,*/unsigned char *sha);
+int match_map_gpu(/*unordered_map<string,int> table,*/unsigned char *sha);
