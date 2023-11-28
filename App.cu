@@ -8,20 +8,8 @@
 #include <iomanip>
 #include <iostream>
 #include <random>
-#define MAX_CHUNK_SIZE 256
 #define cudaCheck(err) (cudaErrorCheck(err, __FILE__, __LINE__))
 
-// char * hash_transform(unsigned char * buff) {
-// 	char * string = (char *)malloc(70);
-// 	int k, i;
-// 	for (i = 0, k = 0; i < 32; i++, k+= 2)
-// 	{
-// 		sprintf(string + k, "%.2x", buff[i]);
-// 		//printf("%02x", buff[i]);
-// 	}
-// 	string[64] = 0;
-// 	return string;
-// }
 
 void cudaErrorCheck(cudaError_t error, const char *file, int line)
 {
@@ -36,10 +24,10 @@ void cudaErrorCheck(cudaError_t error, const char *file, int line)
 CHUNK * GPU_Chunk_Init(/*CHUNK * chunk,*/uint64_t size,  char * data ){
 	CHUNK *chunk;
     cudaCheck(cudaMallocManaged(&chunk, sizeof(CHUNK)));	//j = (JOB *)malloc(sizeof(JOB));
-	cudaCheck(cudaMallocManaged(&(chunk->data), size));
-	chunk->data = (unsigned char*)data;
+	//cudaCheck(cudaMallocManaged(&(chunk->data), size));
+	//chunk->data = (unsigned char*)data;
 	chunk->size = size;
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 32; i++)
 	{
 		chunk->digest[i] = 0xff;
 	}
@@ -61,7 +49,7 @@ __global__ void sha256_gpu(CHUNK ** chunk, int n, unsigned char * file_data) {
 
 void RUN_SHA256_GPU(CHUNK ** chunk, int chunk_num, unsigned char * file_data){
 
-    int BlockSize = 8;
+    int BlockSize = 4;
 	int numBlocks = (chunk_num + BlockSize - 1) / BlockSize;
 	sha256_gpu <<< numBlocks, BlockSize >>> (chunk, chunk_num,file_data);
     cudaCheck(cudaDeviceSynchronize()); // wait for kernel to finish
@@ -140,7 +128,8 @@ int main(int argc, char** argv) {
 	//GPU SHA256
 	cudaCheck(cudaMemcpyToSymbol(dev_k, host_k, sizeof(host_k), 0, cudaMemcpyHostToDevice));
 	unsigned char * dev_buf=nullptr; //char * host_buf=nullptr;
-	cudaCheck(cudaMalloc((void**)&dev_buf, size));
+	cudaCheck(cudaMalloc(&dev_buf, size));
+	//cudaCheck(cudaMallocManaged(&dev_buf, size*sizeof(unsigned char)));
 	cudaCheck(cudaMemcpy(dev_buf, buf, size, cudaMemcpyHostToDevice));
 
     gpu_sha_timer.start();
@@ -151,11 +140,15 @@ int main(int argc, char** argv) {
 	//cudaDeviceReset();
 	//printf("%s", buf);
 
+	int match_chunk=0;
 	for	(int m = 0; m < chunk_num; m++){
 		gpu_dedup_result[m]=match_map_gpu(GPU_Chunk[m]->digest);
 		if(gpu_dedup_result[m]!=cpu_dedup_result[m]){
 			std::cout<< "deduplication result of chunk"<<m<<" "<<"cannot match!"<<std::endl;
 		}
+		else
+			match_chunk++;
+
 		for (int n = 0; n < 32; n++){
 	 		printf("%02x", GPU_Chunk[m]->digest[n]);
 			//printf("%s \n", hash_transform(GPU_Chunk[m]->digest));
@@ -169,9 +162,8 @@ int main(int argc, char** argv) {
     	std::cout<<"\n";
 	 	
 	}
-
-
-    std::cout << "  " << argv[1] << "\n";
+	if(match_chunk==chunk_num)
+		std::cout << "GPU-Computed Deduplication Result of " << argv[1] << " can be verified by CPU Version!\n\n";
 
     std::cout << "--------------- cdc_cpu Throughputs ---------------" << std::endl;
 	float output_latency_cdc_cpu = cpu_cdc_timer.latency() / 1000.0;

@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
 			runJobs(jobs, n);
 		}
 	}
-
+	printf("n is:%d\n",n);
 	cudaDeviceSynchronize();
 	print_jobs(jobs, n);
 	cudaDeviceReset();
