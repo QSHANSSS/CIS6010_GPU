@@ -11,6 +11,7 @@
 #define rotr(a,b) (((a) >> (b)) | ((a) << (32-b)))
 
 
+
 typedef struct CHUNK_Message {
 	//unsigned char * data;
 	unsigned long long size;
