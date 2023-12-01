@@ -13,6 +13,7 @@
 /****************************** MACROS ******************************/
 #define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
 
+#define rotr(a,b) (((a) >> (b)) | ((a) << (32-b)))
 #define ROTLEFT(a,b) (((a) << (b)) | ((a) >> (32-(b))))
 #define ROTRIGHT(a,b) (((a) >> (b)) | ((a) << (32-(b))))
 
@@ -130,7 +131,7 @@ __device__ void mycpy64(uint32_t *d, const uint32_t *s) {
 
 __device__ void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 {
-	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[64];
+	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, s0,s1,ch,maj,m[64];
     WORD S[8];
 
     //mycpy32(S, ctx->state);
@@ -140,8 +141,12 @@ __device__ void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
 
     #pragma unroll 64
-	for (; i < 64; ++i)
-		m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
+	for (; i < 64; ++i){
+		s0 = rotr(m[i - 15] , 7) ^ rotr(m[i - 15] , 18) ^ (m[i - 15] >> 3) ;
+        s1=  rotr(m[i -  2] , 17) ^ rotr(m[i - 2] , 19) ^ (m[i - 2] >> 10) ;
+        m[i]= s0 + s1 + m[i - 7] + m[i - 16];
+	}
+		//m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
 
 	a = ctx->state[0];
 	b = ctx->state[1];
@@ -156,6 +161,7 @@ __device__ void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
 	for (i = 0; i < 64; ++i) {
 		t1 = h + EP1(e) + CH(e, f, g) + dev_k[i] + m[i];
 		t2 = EP0(a) + MAJ(a, b, c);
+
 		h = g;
 		g = f;
 		f = e;

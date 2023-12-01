@@ -5,7 +5,7 @@
 
 #define WIN_SIZE 16  //window length
 #define PRIME 3   //
-#define MODULUS 256
+#define MODULUS 64
 #define TARGET 0
 using namespace std;
 uint64_t prime2[16]={3,9,27,81,243,729,2187,6561,19683,59049,177147,531441,1594323,4782969,14348907,43046721};

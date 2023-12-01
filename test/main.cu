@@ -11,6 +11,8 @@
 #include "sha256.cuh"
 #include <dirent.h>
 #include <ctype.h>
+#include <iostream>
+#include "../stopwatch.h"
 
 char * trim(char *str){
     size_t len = 0;
@@ -141,7 +143,7 @@ int main(int argc, char **argv) {
 	char option, index;
 	ssize_t read;
 	JOB ** jobs;
-
+	stopwatch gpu_sha_timer;
 	// parse input
 	while ((option = getopt(argc, argv,"hf:")) != -1)
 		switch (option) {
@@ -179,7 +181,9 @@ int main(int argc, char **argv) {
 		}
 
 		pre_sha256();
+		gpu_sha_timer.start();
 		runJobs(jobs, n);
+		gpu_sha_timer.stop();
 
 	} else {
 		// get number of arguments = files = jobs
@@ -195,12 +199,20 @@ int main(int argc, char **argv) {
 			}
 
 			pre_sha256();
+			gpu_sha_timer.start();
 			runJobs(jobs, n);
+			
 		}
 	}
 	printf("n is:%d\n",n);
 	cudaDeviceSynchronize();
+	gpu_sha_timer.stop();
 	print_jobs(jobs, n);
 	cudaDeviceReset();
+	std::cout << "--------------- sha256_gpu Throughputs ---------------" << std::endl;
+	float output_latency_gpu = gpu_sha_timer.latency() / 1000.0;
+	float output_throughput_gpu = (temp / 1000000.0) / output_latency_gpu; // Mb/s
+	std::cout << "Output Throughput of GPU_SHA256: " << output_throughput_gpu << " Mb/s."
+			<< " (Latency: " << output_latency_gpu << "s)." << std::endl;
 	return 0;
 }

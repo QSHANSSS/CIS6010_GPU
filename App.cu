@@ -52,7 +52,7 @@ void RUN_SHA256_GPU(CHUNK ** chunk, int chunk_num, unsigned char * file_data){
     int BlockSize = 4;
 	int numBlocks = (chunk_num + BlockSize - 1) / BlockSize;
 	sha256_gpu <<< numBlocks, BlockSize >>> (chunk, chunk_num,file_data);
-    cudaCheck(cudaDeviceSynchronize()); // wait for kernel to finish
+	cudaCheck(cudaDeviceSynchronize()); // wait for kernel to finish
 }
 
 int main(int argc, char** argv) {
@@ -60,7 +60,6 @@ int main(int argc, char** argv) {
 	std::cout << "usage: ./gpu <path>" << "\n";
 	exit(0);
     }
-
     stopwatch cpu_sha_timer;
     stopwatch cpu_cdc_timer;
 	stopwatch cpu_dedup_timer;
@@ -135,11 +134,11 @@ int main(int argc, char** argv) {
     gpu_sha_timer.start();
     RUN_SHA256_GPU(GPU_Chunk,chunk_num,dev_buf);
     gpu_sha_timer.stop();
+
 	cudaCheck(cudaGetLastError());      // check for errors from kernel run
-	cudaCheck(cudaMemcpy(buf, dev_buf, size, cudaMemcpyDeviceToHost));
+	//cudaCheck(cudaMemcpy(buf, dev_buf, size, cudaMemcpyDeviceToHost));
 	//cudaDeviceReset();
 	//printf("%s", buf);
-
 	int match_chunk=0;
 	for	(int m = 0; m < chunk_num; m++){
 		gpu_dedup_result[m]=match_map_gpu(GPU_Chunk[m]->digest);
@@ -160,10 +159,12 @@ int main(int argc, char** argv) {
 	    else
 		    std::cout<< "gpu: chunk"<<m<<" "<<"is deduplicated with chunk"<<gpu_dedup_result[m]<<std::endl;
     	std::cout<<"\n";
-	 	
 	}
+
 	if(match_chunk==chunk_num)
 		std::cout << "GPU-Computed Deduplication Result of " << argv[1] << " can be verified by CPU Version!\n\n";
+	else
+		std::cout << "GPU-Computed Deduplication Result of " << argv[1] << " is wrong!!\n\n";
 
     std::cout << "--------------- cdc_cpu Throughputs ---------------" << std::endl;
 	float output_latency_cdc_cpu = cpu_cdc_timer.latency() / 1000.0;
@@ -176,7 +177,7 @@ int main(int argc, char** argv) {
 	float output_throughput_cpu = (size / 1000000.0) / output_latency_cpu; // Mb/s
 	std::cout << "Output Throughput of CPU_SHA256: " << output_throughput_cpu << " Mb/s."
 			<< " (Latency: " << output_latency_cpu << "s)." << std::endl;
-	
+
 	std::cout << "--------------- sha256_gpu Throughputs ---------------" << std::endl;
 	float output_latency_gpu = gpu_sha_timer.latency() / 1000.0;
 	float output_throughput_gpu = (chunk_num*256 / 1000000.0) / output_latency_gpu; // Mb/s
