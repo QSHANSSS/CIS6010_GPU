@@ -14,7 +14,7 @@
 typedef struct CHUNK_Message {
 	//unsigned char * data;
 	unsigned char digest[32];
-	int start;
+	uint32_t start;
 	unsigned long long size;
 	//char fname[128];
 }CHUNK;
@@ -50,29 +50,25 @@ static const uint32_t host_k[64] = {
 		h = g; g = f; f = e; e = d + temp1;\
 		d = c; c = b; b = a; a = temp1 + temp2;
 
-
-
-__device__ void sha256_message_schedule(const unsigned char data[],uint32_t m[])
+__device__ void sha256_compress_iter(const unsigned char data[],uint32_t state[8])
 {
-    uint32_t s0,s1,i,j;
-
+	uint32_t s0,s1,i,j;
+	uint32_t m[64];
     #pragma unroll 16
 	for (i = 0, j = 0; i < 16; i++, j += 4){
 		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
 		//m[i+1] = (data[j+4] << 24) | (data[j + 5] << 16) | (data[j + 6] << 8) | (data[j + 7]);
 	}
 
-    #pragma unroll 48
+    #pragma unroll 64
 	for (; i < 64; ++i) {
 		s0 = rotr(m[i - 15] , 7) ^ rotr(m[i - 15] , 18) ^ (m[i - 15] >> 3) ;
         s1=  rotr(m[i -  2] , 17) ^ rotr(m[i - 2] , 19) ^ (m[i - 2] >> 10) ;
         m[i]= s0 + s1 + m[i - 7] + m[i - 16];
     }
-}
 
-__device__ void sha256_compress(/*SHA256_CTX *ctx,*/uint32_t state[8], uint32_t m[])
-{
-    uint32_t a, b, c, d, e, f, g, h, i, temp1, temp2, ch, s1, s0, maj;
+
+	uint32_t a, b, c, d, e, f, g, h, temp1, temp2, ch, s2, s3, maj;
 	a = state[0];
 	b = state[1];
 	c = state[2];
@@ -84,13 +80,13 @@ __device__ void sha256_compress(/*SHA256_CTX *ctx,*/uint32_t state[8], uint32_t 
 
     #pragma unroll 
 	for (i = 0; i < 64; ++i) {
-		s1 =  rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+		s3 =  rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
         ch = (e & f) ^ (~e & g);
-        temp1 = h + rotr(e,6) ^ rotr(e,11) ^ rotr(e,25) + (e & f) ^ (~e & g) + + dev_k[i] + m[i];
+        temp1 = h + s3 + ch + dev_k[i] + m[i];
 
-        s0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+        s2 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
         maj= (((a) & (b)) ^ ((a) & (c)) ^ ((b) & (c))); //((x & (y | z)) | (y & z))
-		temp2 = s0 + maj;
+		temp2 = s2 + maj;
 
 		h = g; g = f; f = e;
 		e = d + temp1; d = c;
@@ -107,7 +103,65 @@ __device__ void sha256_compress(/*SHA256_CTX *ctx,*/uint32_t state[8], uint32_t 
 	state[5] += f;
 	state[6] += g;
 	state[7] += h;
+
 }
+
+
+// __device__ void sha256_message_schedule(const unsigned char data[],uint32_t m[])
+// {
+//     uint32_t s0,s1,i,j;
+//     #pragma unroll 16
+// 	for (i = 0, j = 0; i < 16; i++, j += 4){
+// 		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
+// 		//m[i+1] = (data[j+4] << 24) | (data[j + 5] << 16) | (data[j + 6] << 8) | (data[j + 7]);
+// 	}
+
+//     #pragma unroll 64
+// 	for (; i < 64; ++i) {
+// 		s0 = rotr(m[i - 15] , 7) ^ rotr(m[i - 15] , 18) ^ (m[i - 15] >> 3) ;
+//         s1=  rotr(m[i -  2] , 17) ^ rotr(m[i - 2] , 19) ^ (m[i - 2] >> 10) ;
+//         m[i]= s0 + s1 + m[i - 7] + m[i - 16];
+//     }
+// }
+
+// __device__ void sha256_compress(/*SHA256_CTX *ctx,*/uint32_t state[8], uint32_t m[])
+// {
+//     uint32_t a, b, c, d, e, f, g, h, i, temp1, temp2, ch, s1, s0, maj;
+// 	a = state[0];
+// 	b = state[1];
+// 	c = state[2];
+// 	d = state[3];
+// 	e = state[4];
+// 	f = state[5];
+// 	g = state[6];
+// 	h = state[7];
+
+//     #pragma unroll 
+// 	for (i = 0; i < 64; ++i) {
+// 		s1 =  rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+//         ch = (e & f) ^ (~e & g);
+//         temp1 = h + s1 + ch + dev_k[i] + m[i];
+
+//         s0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+//         maj= (((a) & (b)) ^ ((a) & (c)) ^ ((b) & (c))); //((x & (y | z)) | (y & z))
+// 		temp2 = s0 + maj;
+
+// 		h = g; g = f; f = e;
+// 		e = d + temp1; d = c;
+// 		c = b; b = a;
+// 		a = temp1 + temp2;
+		
+// 	}
+
+// 	state[0] += a;
+// 	state[1] += b;
+// 	state[2] += c;
+// 	state[3] += d;
+// 	state[4] += e;
+// 	state[5] += f;
+// 	state[6] += g;
+// 	state[7] += h;
+// }
 
 __device__ void sha256_init(SHA256_CTX *ctx)
 {
@@ -138,9 +192,10 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[]/*, uint32_t
 		ctx->data[i++] = 0x80;
 		while (i < 64)
 			ctx->data[i++] = 0x00;
-		uint32_t m[64];
-        sha256_message_schedule(ctx->data,m);
-	    sha256_compress(ctx->state,m);
+		//uint32_t m[64];
+        //sha256_message_schedule(ctx->data,m);
+	    //sha256_compress(ctx->state,m);
+		sha256_compress_iter(ctx->data,ctx->state);
 		//sha256_trans(ctx->data,m,ctx->state);
 		memset(ctx->data, 0, 56);
 	}
@@ -155,47 +210,45 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[]/*, uint32_t
 	ctx->data[58] = ctx->bitlen >> 40;
 	ctx->data[57] = ctx->bitlen >> 48;
 	ctx->data[56] = ctx->bitlen >> 56;
-	uint32_t m[64];
-    sha256_message_schedule(ctx->data,m);
-	sha256_compress(ctx->state,m);
-	//sha256_trans(ctx->data,m,ctx->state);
+
+	//uint32_t m[64];
+    //sha256_message_schedule(ctx->data,m);
+	//sha256_compress(ctx->state,m);
+	sha256_compress_iter(ctx->data,ctx->state);
 
 	//#pragma unroll 4
 	//for (i = 0; i < 4; ++i) {
 		hash[0] = (ctx->state[0] >> (24 )) & 0x000000ff;
-		hash[4] = (ctx->state[1] >> (24 )) & 0x000000ff;
-		hash[8] = (ctx->state[2] >> (24)) & 0x000000ff;
-		hash[12] = (ctx->state[3] >> (24)) & 0x000000ff;
-		hash[16] = (ctx->state[4] >> (24)) & 0x000000ff;
-		hash[20] = (ctx->state[5] >> (24)) & 0x000000ff;
-		hash[24] = (ctx->state[6] >> (24)) & 0x000000ff;
-		hash[28] = (ctx->state[7] >> (24)) & 0x000000ff;
-
 		hash[1] = (ctx->state[0] >> (16)) & 0x000000ff;
-		hash[5] = (ctx->state[1] >> (16)) & 0x000000ff;
-		hash[9] = (ctx->state[2] >> (16)) & 0x000000ff;
-		hash[13] = (ctx->state[3] >> (16)) & 0x000000ff;
-		hash[17] = (ctx->state[4] >> (16)) & 0x000000ff;
-		hash[21] = (ctx->state[5] >> (16)) & 0x000000ff;
-		hash[25] = (ctx->state[6] >> (16)) & 0x000000ff;
-		hash[29] = (ctx->state[7] >> (16)) & 0x000000ff;
-
 		hash[2] = (ctx->state[0] >> (8)) & 0x000000ff;
-		hash[6] = (ctx->state[1] >> (8)) & 0x000000ff;
-		hash[10] = (ctx->state[2] >> (8)) & 0x000000ff;
-		hash[14] = (ctx->state[3] >> (8)) & 0x000000ff;
-		hash[18] = (ctx->state[4] >> (8)) & 0x000000ff;
-		hash[22] = (ctx->state[5] >> (8)) & 0x000000ff;
-		hash[26] = (ctx->state[6] >> (8)) & 0x000000ff;
-		hash[30] = (ctx->state[7] >> (8)) & 0x000000ff;
-
 		hash[3] = ctx->state[0] ;
+		hash[4] = (ctx->state[1] >> (24 )) & 0x000000ff;
+		hash[5] = (ctx->state[1] >> (16)) & 0x000000ff;
+		hash[6] = (ctx->state[1] >> (8)) & 0x000000ff;
 		hash[7] = ctx->state[1] ;
+		hash[8] = (ctx->state[2] >> (24)) & 0x000000ff;
+		hash[9] = (ctx->state[2] >> (16)) & 0x000000ff;
+		hash[10] = (ctx->state[2] >> (8)) & 0x000000ff;
 		hash[11] = ctx->state[2] ;
+		hash[12] = (ctx->state[3] >> (24)) & 0x000000ff;
+		hash[13] = (ctx->state[3] >> (16)) & 0x000000ff;
+		hash[14] = (ctx->state[3] >> (8)) & 0x000000ff;
 		hash[15] = ctx->state[3] ;
+		hash[16] = (ctx->state[4] >> (24)) & 0x000000ff;
+		hash[17] = (ctx->state[4] >> (16)) & 0x000000ff;
+		hash[18] = (ctx->state[4] >> (8)) & 0x000000ff;
 		hash[19] = ctx->state[4] ;
+		hash[20] = (ctx->state[5] >> (24)) & 0x000000ff;
+		hash[21] = (ctx->state[5] >> (16)) & 0x000000ff;
+		hash[22] = (ctx->state[5] >> (8)) & 0x000000ff;
 		hash[23] = ctx->state[5] ;
+		hash[24] = (ctx->state[6] >> (24)) & 0x000000ff;
+		hash[25] = (ctx->state[6] >> (16)) & 0x000000ff;
+		hash[26] = (ctx->state[6] >> (8)) & 0x000000ff;
 		hash[27] = ctx->state[6];
+		hash[28] = (ctx->state[7] >> (24)) & 0x000000ff;
+		hash[29] = (ctx->state[7] >> (16)) & 0x000000ff;
+		hash[30] = (ctx->state[7] >> (8)) & 0x000000ff;
 		hash[31] = ctx->state[7];
 	//}
 }
@@ -205,19 +258,28 @@ __device__ void sha256_padding(SHA256_CTX *ctx, unsigned char hash[]/*, uint32_t
 __device__ void sha256_update(SHA256_CTX *ctx, size_t len,uint32_t start,unsigned char file_data[])
 {
 	uint32_t i;
-    //ctx->data_len = 0;
-
+	ctx->data_len = 0;
+	ctx->bitlen = 0;
+	ctx->state[0] = 0x6a09e667;
+	ctx->state[1] = 0xbb67ae85;
+	ctx->state[2] = 0x3c6ef372;
+	ctx->state[3] = 0xa54ff53a;
+	ctx->state[4] = 0x510e527f;
+	ctx->state[5] = 0x9b05688c;
+	ctx->state[6] = 0x1f83d9ab;
+	ctx->state[7] = 0x5be0cd19;
 	for (i = 0; i < len; i++) {
 		ctx->data[ctx->data_len] = file_data[start+i];
 		ctx->data_len++;
 		if (ctx->data_len == 64) {
-			uint32_t message[64];
-            sha256_message_schedule(ctx->data,message);
-			sha256_compress(ctx->state,message);
-			//sha256_trans(ctx->data,message,ctx->state);
+			//uint32_t message[64];
+            //sha256_message_schedule(ctx->data,message);
+			//sha256_compress(ctx->state,message);
+			sha256_compress_iter(ctx->data,ctx->state);
 			ctx->bitlen += 512;
 			ctx->data_len = 0;
 		}
+		
 	}
 }
 
