@@ -11,6 +11,8 @@
 #include <random>
 #define cudaCheck(err) (cudaErrorCheck(err, __FILE__, __LINE__))
 #define NO_STREAM
+#define CHUNK_PER_STREAM 7
+#define DIGEST_SIZE 32
 stopwatch gpu_sha_timer;
 cudaEvent_t beg, stop;
 
@@ -37,42 +39,44 @@ CHUNK * GPU_Chunk_Init(/*CHUNK * chunk,*/uint64_t size,  char * data ){
 	return chunk;
 }
 
-__global__ void sha256_stream_kernel(unsigned char hash[], int n, unsigned char * file_data,int chunk_size) {
+__global__ void sha256_stream_kernel(unsigned char hash[], int n, unsigned char * file_data,int* boundary) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	
 	if (i < n){
 		//uint32_t message_update[64]={0};
 		//uint32_t message_padding[64]={0};
 		SHA256_CTX ctx;
 		//sha256_init(&ctx);
-		sha256_update(&ctx, chunk_size,0,file_data);
-		sha256_padding(&ctx, hash);
+		sha256_update(&ctx, boundary[i+1]-boundary[i],boundary[i]-boundary[0],file_data);
+		sha256_padding(&ctx, hash+32*i);
 	} 
-	__syncthreads();
 }
 
-void RUN_SHA256_GPU_STREAM(int *boundary, int chunk_num, char * data,uint32_t file_len, unsigned char **digest){
-	const int nStreams = chunk_num;
+void RUN_SHA256_GPU_STREAM(int boundary[], int chunk_num, char data[],uint32_t file_len, unsigned char digest[]){
+	const int nStreams = (chunk_num+CHUNK_PER_STREAM-1)/CHUNK_PER_STREAM;
 	cudaEventCreate(&beg);
     cudaEventCreate(&stop);
 	cudaStream_t streams[nStreams];
+	cudaStream_t streams2[nStreams];
 	for (int i = 0; i < nStreams; i++) {
   		cudaStreamCreate(&streams[i]);
+		cudaStreamCreate(&streams2[i]);
 	}
 	int offset=0;
 	unsigned char * dev_data=nullptr; 
 	//unsigned char *digest=nullptr;
 	unsigned char *dev_digest=nullptr;
-	cudaMalloc(&dev_data, file_len);
 	//cudaMallocHost(&digest, 32);
-	cudaMalloc(&dev_digest, 32);
+	cudaMalloc(&dev_digest, DIGEST_SIZE*CHUNK_PER_STREAM);
+	int currentChunk_num=CHUNK_PER_STREAM;
 	
 	for(int i=0; i<nStreams; i++)
 	{
+		//printf("current_chunk:%d\n",currentChunk_num);
+		cudaMalloc(&dev_data, boundary[i*CHUNK_PER_STREAM+currentChunk_num]-boundary[i*CHUNK_PER_STREAM]);
 		cudaEventRecord(beg);
-		cudaMemcpyAsync(dev_data+offset,
+		cudaMemcpyAsync(dev_data,
                     data+offset,
-                    boundary[i+1]-boundary[i],
+                    boundary[i*CHUNK_PER_STREAM+currentChunk_num]-boundary[i*CHUNK_PER_STREAM],
                     cudaMemcpyHostToDevice,
                     streams[i] );
 
@@ -80,17 +84,23 @@ void RUN_SHA256_GPU_STREAM(int *boundary, int chunk_num, char * data,uint32_t fi
 		int numBlocks = (chunk_num + BlockSize - 1) / BlockSize;
 		gpu_sha_timer.start();
 		sha256_stream_kernel <<< numBlocks, BlockSize >>> (dev_digest, 
-								chunk_num,dev_data+offset,boundary[i+1]-boundary[i]);
-		gpu_sha_timer.stop();
-		cudaMemcpyAsync( digest[i],
+								currentChunk_num,
+								dev_data,
+								boundary+i*CHUNK_PER_STREAM);
+		
+		cudaMemcpyAsync( digest+i*CHUNK_PER_STREAM*DIGEST_SIZE,
                     dev_digest,
-                    32,
+                    DIGEST_SIZE*currentChunk_num,
                     cudaMemcpyDeviceToHost,
-                    streams[i] );
-					
-		offset +=boundary[i+1]-boundary[i];
+                    streams2[i] );
+		
+		gpu_sha_timer.stop();
+		offset +=boundary[i*CHUNK_PER_STREAM+currentChunk_num]-boundary[i*CHUNK_PER_STREAM];
+		currentChunk_num = ((i+1) != (nStreams - 1)) ?  CHUNK_PER_STREAM 
+							:(chunk_num % CHUNK_PER_STREAM)? chunk_num % CHUNK_PER_STREAM
+							: CHUNK_PER_STREAM;
 	} 
-	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();	
 	cudaEventRecord(stop);
 	cudaEventSynchronize(beg);
 	cudaEventSynchronize(stop);
@@ -135,8 +145,10 @@ int main(int argc, char** argv) {
     file.read(buf, size);
 
 	cudaCheck(cudaMemcpyToSymbol(new_dev_k, new_host_k, sizeof(new_host_k), 0, cudaMemcpyHostToDevice));
-	int *boundary=(int *)malloc(sizeof(int)*(size));
-	char  *chunk=(char *)malloc(sizeof(char)*1000);
+	//int *boundary=(int *)malloc(sizeof(int)*(size));
+	int *boundary=0;
+	cudaCheck(cudaMallocManaged(&boundary, (1000)*sizeof(int)));
+	char  *chunk=(char *)malloc(sizeof(char)*10000);
 	uint8_t chunk_num;
 	CHUNK ** GPU_Chunk;
 
@@ -148,10 +160,10 @@ int main(int argc, char** argv) {
 	int cpu_dedup_result[chunk_num]={0};
 	int gpu_dedup_result[chunk_num]={0};
 	int gpu_dedup_result_2[chunk_num]={0};
-	unsigned char **host_digest;
-	cudaMallocHost((void**)&host_digest, chunk_num * sizeof(unsigned char *));
-	for (int i = 0; i < chunk_num; i++) 
-        cudaMallocHost((void**)&host_digest[i], 32 * sizeof(unsigned char));
+	unsigned char *host_digest;
+	// cudaMallocHost((void**)&host_digest, chunk_num * sizeof(unsigned char *));
+	// for (int i = 0; i < chunk_num; i++) 
+        cudaMallocHost(&host_digest, chunk_num*DIGEST_SIZE * sizeof(unsigned char));
 	// for(int i=0;i<chunk_num;i++){
 	// 	std::string str_chunk(buf+boundary[i], boundary[i+1]-boundary[i]);
     //     std::cout << "Chunk" << i<<": " << str_chunk << std::endl;
@@ -195,14 +207,13 @@ int main(int argc, char** argv) {
 	cudaCheck(cudaMemcpy(dev_buf, buf, size, cudaMemcpyHostToDevice));
 
 	RUN_SHA256_GPU_STREAM(boundary,chunk_num,buf,size,host_digest);
-
+	cudaCheck(cudaGetLastError());      // check for errors from kernel run
 #ifdef NO_STREAM
 	gpu_sha_nostream_timer.start();
     RUN_SHA256_GPU(GPU_Chunk,chunk_num,dev_buf);
     gpu_sha_nostream_timer.stop();
 #endif
 	
-	cudaCheck(cudaGetLastError());      // check for errors from kernel run
 	//cudaCheck(cudaMemcpy(buf, dev_buf, size, cudaMemcpyDeviceToHost));
 	//printf("%s", buf);
 	int match_chunk=0;
@@ -210,7 +221,7 @@ int main(int argc, char** argv) {
 #ifdef NO_STREAM
 		//gpu_dedup_result_2[m]=match_map_gpu(GPU_Chunk[m]->digest);
 #endif
-		gpu_dedup_result_2[m]=match_map_gpu(host_digest[m]);
+		gpu_dedup_result_2[m]=match_map_gpu(host_digest+m*DIGEST_SIZE);
 		if(gpu_dedup_result_2[m]!=cpu_dedup_result[m]){
 			std::cout<< "deduplication result of chunk"<<m<<" "<<"cannot match!"<<std::endl;
 		}
@@ -219,16 +230,16 @@ int main(int argc, char** argv) {
 
 		for (int n = 0; n < 32; n++){
 			#ifdef NO_STREAM
-	 		printf("%02x", GPU_Chunk[m]->digest[n]);
+	 		//printf("%02x", GPU_Chunk[m]->digest[n]);
 			#endif
-			//printf("%02x", host_digest[m][n]);
+			printf("%02x", host_digest[m*DIGEST_SIZE+n]);
 		}
 		std::cout<<"\n";
 
 		if(gpu_dedup_result_2[m]==-1)
 		    std::cout<< "gpu:chunk"<<m<<" "<<"is distinct!"<<std::endl;
 	    else
-		    std::cout<< "gpu: chunk"<<m<<" "<<"is deduplicated with chunk"<<gpu_dedup_result[m]<<std::endl;
+		    std::cout<< "gpu: chunk"<<m<<" "<<"is deduplicated with chunk"<<gpu_dedup_result_2[m]<<std::endl;
     	std::cout<<"\n";
 	}
 
@@ -270,10 +281,10 @@ int main(int argc, char** argv) {
     cudaEventElapsedTime(&elapsed_time, beg, stop);
     elapsed_time /= 1000.; // Convert to seconds
 	double flops = (double)2 * size;
-	// printf(
-    //     "Average elapsed time: (%7.6f) s, performance: (%7.2f) GFLOPS. size: (%ld).\n",
-    //     elapsed_time ,
-    //     (flops * 1e-9) / elapsed_time,
-    //     size);
+	printf(
+        "Average elapsed time: (%7.6f) s, performance: (%7.2f) GFLOPS. size: (%ld).\n",
+        elapsed_time ,
+        (flops * 1e-9) / elapsed_time,
+        size);
 
 }

@@ -5,7 +5,7 @@
 
 #define WIN_SIZE 16  //window length
 #define PRIME 3   //
-#define MODULUS 4096
+#define MODULUS 2048
 #define TARGET 0
 
 using namespace std;
