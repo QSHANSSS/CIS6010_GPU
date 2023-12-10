@@ -63,7 +63,7 @@ __device__ void sha256_compress_iter(const unsigned char data[],uint32_t state[8
 	}
 
     #pragma unroll 64
-	for (; i < 64; ++i) {
+	for ( ; i < 64; ++i) {
 		s0 = rotr(m[i - 15] , 7) ^ rotr(m[i - 15] , 18) ^ (m[i - 15] >> 3) ;
         s1=  rotr(m[i -  2] , 17) ^ rotr(m[i - 2] , 19) ^ (m[i - 2] >> 10) ;
         m[i]= s0 + s1 + m[i - 7] + m[i - 16];
@@ -109,61 +109,61 @@ __device__ void sha256_compress_iter(const unsigned char data[],uint32_t state[8
 }
 
 
-__device__ void sha256_message_schedule(const unsigned char data[],uint32_t m[])
-{
-    uint32_t s0,s1,i,j;
-    #pragma unroll 16
-	for (i = 0, j = 0; i < 16; i++, j += 4){
-		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
-		//m[i+1] = (data[j+4] << 24) | (data[j + 5] << 16) | (data[j + 6] << 8) | (data[j + 7]);
-	}
+// __device__ void sha256_message_schedule(const unsigned char data[],uint32_t m[])
+// {
+//     uint32_t s0,s1,i,j;
+//     #pragma unroll 16
+// 	for (i = 0, j = 0; i < 16; i++, j += 4){
+// 		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
+// 		//m[i+1] = (data[j+4] << 24) | (data[j + 5] << 16) | (data[j + 6] << 8) | (data[j + 7]);
+// 	}
 
-    #pragma unroll 64
-	for (; i < 64; ++i) {
-		s0 = rotr(m[i - 15] , 7) ^ rotr(m[i - 15] , 18) ^ (m[i - 15] >> 3) ;
-        s1=  rotr(m[i -  2] , 17) ^ rotr(m[i - 2] , 19) ^ (m[i - 2] >> 10) ;
-        m[i]= s0 + s1 + m[i - 7] + m[i - 16];
-    }
-}
+//     #pragma unroll 64
+// 	for (; i < 64; ++i) {
+// 		s0 = rotr(m[i - 15] , 7) ^ rotr(m[i - 15] , 18) ^ (m[i - 15] >> 3) ;
+//         s1=  rotr(m[i -  2] , 17) ^ rotr(m[i - 2] , 19) ^ (m[i - 2] >> 10) ;
+//         m[i]= s0 + s1 + m[i - 7] + m[i - 16];
+//     }
+// }
 
-__device__ void sha256_compress(/*SHA256_CTX *ctx,*/uint32_t state[8], uint32_t m[])
-{
-    uint32_t a, b, c, d, e, f, g, h, i, temp1, temp2, ch, s1, s0, maj;
-	a = state[0];
-	b = state[1];
-	c = state[2];
-	d = state[3];
-	e = state[4];
-	f = state[5];
-	g = state[6];
-	h = state[7];
+// __device__ void sha256_compress(/*SHA256_CTX *ctx,*/uint32_t state[8], uint32_t m[])
+// {
+//     uint32_t a, b, c, d, e, f, g, h, i, temp1, temp2, ch, s1, s0, maj;
+// 	a = state[0];
+// 	b = state[1];
+// 	c = state[2];
+// 	d = state[3];
+// 	e = state[4];
+// 	f = state[5];
+// 	g = state[6];
+// 	h = state[7];
 
-    #pragma unroll 
-	for (i = 0; i < 64; ++i) {
-		s1 =  rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
-        ch = (e & f) ^ (~e & g);
-        temp1 = h + s1 + ch + dev_k[i] + m[i];
+//     #pragma unroll 
+// 	for (i = 0; i < 64; ++i) {
+// 		s1 =  rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+//         ch = (e & f) ^ (~e & g);
+//         temp1 = h + s1 + ch + dev_k[i] + m[i];
 
-        s0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
-        maj= (((a) & (b)) ^ ((a) & (c)) ^ ((b) & (c))); //((x & (y | z)) | (y & z))
-		temp2 = s0 + maj;
+//         s0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+//         maj= (((a) & (b)) ^ ((a) & (c)) ^ ((b) & (c))); //((x & (y | z)) | (y & z))
+// 		temp2 = s0 + maj;
 
-		h = g; g = f; f = e;
-		e = d + temp1; d = c;
-		c = b; b = a;
-		a = temp1 + temp2;
+// 		h = g; g = f; f = e;
+// 		e = d + temp1; d = c;
+// 		c = b; b = a;
+// 		a = temp1 + temp2;
 		
-	}
+// 	}
 
-	state[0] += a;
-	state[1] += b;
-	state[2] += c;
-	state[3] += d;
-	state[4] += e;
-	state[5] += f;
-	state[6] += g;
-	state[7] += h;
-}
+// 	state[0] += a;
+// 	state[1] += b;
+// 	state[2] += c;
+// 	state[3] += d;
+// 	state[4] += e;
+// 	state[5] += f;
+// 	state[6] += g;
+// 	state[7] += h;
+// }
 
 __device__ void sha256_init(SHA256_CTX *ctx)
 {
@@ -268,6 +268,8 @@ __device__ void sha256_update(SHA256_CTX *ctx, size_t len,uint32_t start,unsigne
 	ctx->state[5] = 0x9b05688c;
 	ctx->state[6] = 0x1f83d9ab;
 	ctx->state[7] = 0x5be0cd19;
+
+		
 	for (i = 0; i < len; i++) {
 		ctx->data[ctx->data_len] = file_data[i+start];
 		ctx->data_len++;
@@ -279,7 +281,14 @@ __device__ void sha256_update(SHA256_CTX *ctx, size_t len,uint32_t start,unsigne
 			ctx->bitlen += 512;
 			ctx->data_len = 0;
 		}
-		
 	}
+	// for (i = 0; i < len; i=i+64) {
+	// 	#pragma unroll 64
+	// 	for(uint8_t k=0 ; k<64 ; k++)
+	// 		ctx->data[k]=file_data[start+i+k];
+	// 	sha256_compress_iter(ctx->data,ctx->state);
+	// 	ctx->bitlen += 512;
+
+	// }
 }
 

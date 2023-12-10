@@ -11,7 +11,7 @@
 #include <random>
 #define cudaCheck(err) (cudaErrorCheck(err, __FILE__, __LINE__))
 #define NO_STREAM
-#define CHUNK_PER_STREAM 7
+#define SET_CHUNK_PER_STREAM 7
 #define DIGEST_SIZE 32
 stopwatch gpu_sha_timer;
 cudaEvent_t beg, stop;
@@ -52,6 +52,7 @@ __global__ void sha256_stream_kernel(unsigned char hash[], int n, unsigned char 
 }
 
 void RUN_SHA256_GPU_STREAM(int boundary[], int chunk_num, char data[],uint32_t file_len, unsigned char digest[]){
+	const int CHUNK_PER_STREAM=(chunk_num>SET_CHUNK_PER_STREAM)? SET_CHUNK_PER_STREAM:chunk_num;
 	const int nStreams = (chunk_num+CHUNK_PER_STREAM-1)/CHUNK_PER_STREAM;
 	cudaEventCreate(&beg);
     cudaEventCreate(&stop);
@@ -74,6 +75,7 @@ void RUN_SHA256_GPU_STREAM(int boundary[], int chunk_num, char data[],uint32_t f
 		//printf("current_chunk:%d\n",currentChunk_num);
 		cudaMalloc(&dev_data, boundary[i*CHUNK_PER_STREAM+currentChunk_num]-boundary[i*CHUNK_PER_STREAM]);
 		cudaEventRecord(beg);
+		gpu_sha_timer.start();
 		cudaMemcpyAsync(dev_data,
                     data+offset,
                     boundary[i*CHUNK_PER_STREAM+currentChunk_num]-boundary[i*CHUNK_PER_STREAM],
@@ -82,7 +84,7 @@ void RUN_SHA256_GPU_STREAM(int boundary[], int chunk_num, char data[],uint32_t f
 
 		int BlockSize = 256;
 		int numBlocks = (chunk_num + BlockSize - 1) / BlockSize;
-		gpu_sha_timer.start();
+		
 		sha256_stream_kernel <<< numBlocks, BlockSize >>> (dev_digest, 
 								currentChunk_num,
 								dev_data,
@@ -281,10 +283,10 @@ int main(int argc, char** argv) {
     cudaEventElapsedTime(&elapsed_time, beg, stop);
     elapsed_time /= 1000.; // Convert to seconds
 	double flops = (double)2 * size;
-	printf(
-        "Average elapsed time: (%7.6f) s, performance: (%7.2f) GFLOPS. size: (%ld).\n",
-        elapsed_time ,
-        (flops * 1e-9) / elapsed_time,
-        size);
+	// printf(
+    //     "Average elapsed time: (%7.6f) s, performance: (%7.2f) GFLOPS. size: (%ld).\n",
+    //     elapsed_time ,
+    //     (flops * 1e-9) / elapsed_time,
+    //     size);
 
 }
